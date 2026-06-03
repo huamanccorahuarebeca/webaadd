@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Lector QR - Registro Temporal</title>
+
+<style>
+    *{
+        margin:0;
+        padding:0;
+        box-sizing:border-box;
+        font-family: Arial, Helvetica, sans-serif;
+    }
+
+    body{
+        background:#f4f6f9;
+        padding:20px;
+    }
+
+    .container{
+        max-width:900px;
+        margin:auto;
+        background:white;
+        padding:20px;
+        border-radius:12px;
+        box-shadow:0 4px 10px rgba(0,0,0,.1);
+    }
+
+    h1{
+        text-align:center;
+        margin-bottom:20px;
+        color:#333;
+    }
+
+    .botones{
+        display:flex;
+        gap:10px;
+        justify-content:center;
+        margin-bottom:20px;
+        flex-wrap:wrap;
+    }
+
+    button{
+        padding:12px 20px;
+        border:none;
+        border-radius:8px;
+        cursor:pointer;
+        color:white;
+        font-size:16px;
+    }
+
+    #btnIniciar{
+        background:#28a745;
+    }
+
+    #btnDetener{
+        background:#dc3545;
+    }
+
+    #reader{
+        width:100%;
+        max-width:500px;
+        margin:20px auto;
+    }
+
+    table{
+        width:100%;
+        border-collapse:collapse;
+        margin-top:20px;
+    }
+
+    th{
+        background:#007bff;
+        color:white;
+        padding:10px;
+    }
+
+    td{
+        padding:10px;
+        border:1px solid #ddd;
+        text-align:center;
+    }
+
+    tr:nth-child(even){
+        background:#f8f8f8;
+    }
+
+    .estado{
+        text-align:center;
+        margin-top:10px;
+        font-weight:bold;
+        color:#444;
+    }
+</style>
+</head>
+<body>
+
+<div class="container">
+
+    <h1>Registro Temporal de Códigos QR</h1>
+
+    <div class="botones">
+        <button id="btnIniciar">📷 Iniciar Cámara</button>
+        <button id="btnDetener">⛔ Detener Cámara</button>
+    </div>
+
+    <div id="reader"></div>
+
+    <div class="estado" id="estado">
+        Cámara detenida
+    </div>
+
+    <table>
+        <thead>
+            <tr>
+                <th>#</th>
+                <th>Contenido QR</th>
+                <th>Fecha</th>
+                <th>Hora</th>
+            </tr>
+        </thead>
+        <tbody id="tablaRegistros"></tbody>
+    </table>
+
+</div>
+
+<script src="https://unpkg.com/html5-qrcode"></script>
+
+<script>
+
+let qrScanner = null;
+let contador = 0;
+let ultimoCodigo = "";
+
+const tabla = document.getElementById("tablaRegistros");
+const estado = document.getElementById("estado");
+
+function obtenerFechaHora() {
+    const ahora = new Date();
+
+    return {
+        fecha: ahora.toLocaleDateString(),
+        hora: ahora.toLocaleTimeString()
+    };
+}
+
+function registrarCodigo(codigo) {
+
+    // Evitar lecturas repetidas consecutivas
+    if(codigo === ultimoCodigo){
+        return;
+    }
+
+    ultimoCodigo = codigo;
+    contador++;
+
+    const fh = obtenerFechaHora();
+
+    const fila = document.createElement("tr");
+
+    fila.innerHTML = `
+        <td>${contador}</td>
+        <td>${codigo}</td>
+        <td>${fh.fecha}</td>
+        <td>${fh.hora}</td>
+    `;
+
+    tabla.prepend(fila);
+}
+
+async function iniciarCamara() {
+
+    try {
+
+        qrScanner = new Html5Qrcode("reader");
+
+        await qrScanner.start(
+            { facingMode: "environment" },
+            {
+                fps: 10,
+                qrbox: 250
+            },
+            (decodedText) => {
+                registrarCodigo(decodedText);
+            },
+            (errorMessage) => {
+                // Ignorar errores de lectura
+            }
+        );
+
+        estado.textContent = "✅ Cámara activa. Escanee un código QR.";
+
+    } catch(error) {
+        console.error(error);
+        estado.textContent = "❌ No fue posible acceder a la cámara.";
+    }
+}
+
+async function detenerCamara() {
+
+    try {
+
+        if(qrScanner){
+            await qrScanner.stop();
+            await qrScanner.clear();
+            qrScanner = null;
+        }
+
+        estado.textContent = "⛔ Cámara detenida";
+
+    } catch(error){
+        console.error(error);
+    }
+}
+
+document.getElementById("btnIniciar")
+.addEventListener("click", iniciarCamara);
+
+document.getElementById("btnDetener")
+.addEventListener("click", detenerCamara);
+
+</script>
+
+</body>
+</html>
