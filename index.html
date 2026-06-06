@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Belleza & Gestión QR</title>
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <script src="https://unpkg.com/html5-qrcode"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap');
+        body { font-family: 'Inter', sans-serif; background-color: #fcfaff; }
+        .bg-beauty { background: linear-gradient(135deg, #6366f1 0%, #a855f7 100%); }
+    </style>
+</head>
+<body class="p-4 md:p-8">
+
+    <div class="max-w-7xl mx-auto">
+        <header class="bg-beauty rounded-2xl p-6 mb-8 text-white shadow-xl flex flex-col md:flex-row justify-between items-center gap-4">
+            <div>
+                <h1 class="text-3xl font-bold italic">L'Oréal Pro Manager</h1>
+                <p class="opacity-90">Gestión de Productos y Seguimiento de Inventario</p>
+            </div>
+            <div class="flex gap-3">
+                <button onclick="exportarBackup()" class="bg-white/20 hover:bg-white/30 backdrop-blur-md px-4 py-2 rounded-lg text-sm font-semibold transition-all">📥 Exportar JSON</button>
+                <label class="bg-white text-indigo-600 px-4 py-2 rounded-lg text-sm font-bold cursor-pointer hover:bg-gray-100 transition-all">
+                    📤 Importar
+                    <input type="file" id="importFile" class="hidden" onchange="importarBackup(event)">
+                </label>
+            </div>
+        </header>
+
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            
+            <div class="lg:col-span-2 bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+                <div class="p-6 border-b border-gray-50 flex justify-between items-center bg-gray-50/50">
+                    <h2 class="text-xl font-bold text-gray-800">Catálogo de Productos</h2>
+                    <button onclick="abrirFormulario()" class="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-xl text-sm font-bold shadow-lg transition-transform active:scale-95">
+                        + Añadir Producto
+                    </button>
+                </div>
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left">
+                        <thead>
+                            <tr class="text-xs uppercase text-gray-400 font-bold border-b">
+                                <th class="px-6 py-4">Producto</th>
+                                <th class="px-6 py-4">Responsable / DNI</th>
+                                <th class="px-6 py-4">Marca</th>
+                                <th class="px-6 py-4 text-center">Acciones</th>
+                            </tr>
+                        </thead>
+                        <tbody id="listaProductos" class="text-gray-600 divide-y divide-gray-50">
+                            </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div class="space-y-8">
+                <div class="bg-white p-6 rounded-2xl shadow-md border-t-4 border-indigo-500 text-center">
+                    <h3 class="text-lg font-bold mb-2">Escáner de Seguimiento</h3>
+                    <p class="text-sm text-gray-500 mb-6">Escanea el DNI del responsable para registrar el seguimiento del producto.</p>
+                    <div id="reader" class="mb-4 rounded-xl overflow-hidden bg-gray-100"></div>
+                    <button id="btnQR" onclick="iniciarEscaneo()" class="w-full bg-indigo-600 text-white py-3 rounded-xl font-bold hover:shadow-indigo-200 hover:shadow-lg transition-all flex justify-center items-center gap-2">
+                        <span>📷 Abrir Cámara</span>
+                    </button>
+                </div>
+
+                <div class="bg-white p-6 rounded-2xl shadow-md">
+                    <div class="flex justify-between items-center mb-4">
+                        <h3 class="text-lg font-bold">Seguimiento Diario</h3>
+                        <input type="date" id="fechaFiltro" onchange="renderSeguimiento()" class="text-xs border rounded-lg p-1 outline-none focus:ring-2 ring-indigo-200">
+                    </div>
+                    <div id="historialContenedor" class="space-y-3 max-h-80 overflow-y-auto pr-2">
+                        </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // 1. Datos iniciales (20 registros solicitados)
+        const datosBase = [
+            { dni: "46871295", nombres: "Claudia Marina", apellidos: "Alva Benavides", genero: "Femenino", edad: 28, telefono: "981452369", producto: "Sérum Revitalift", marca: "L'Oréal Paris" },
+            { dni: "72145833", nombres: "Juan Pablo", apellidos: "Gómez Peralta", genero: "Masculino", edad: 34, telefono: "945871002", producto: "UV Defender", marca: "L'Oréal Paris" },
+            { dni: "10254711", nombres: "Ana Valeria", apellidos: "Castro Villalobos", genero: "Femenino", edad: 41, telefono: "912345114", producto: "Base Infallible 24H", marca: "L'Oréal Paris" },
+            { dni: "48963244", nombres: "Luis Fernando", apellidos: "Quispe Mamani", genero: "Masculino", edad: 25, telefono: "963852552", producto: "Gel CeraVe Espumoso", marca: "L'Oréal (CeraVe)" },
+            { dni: "09852188", nombres: "María Fernanda", apellidos: "Flores Chávez", genero: "Femenino", edad: 52, telefono: "974125993", producto: "Age Perfect Antiedad", marca: "L'Oréal Paris" },
+            { dni: "74125811", nombres: "Sofía Valentina", apellidos: "Mendoza Ruiz", genero: "Femenino", edad: 23, telefono: "936258884", producto: "Lash Paradise", marca: "L'Oréal Paris" },
+            { dni: "41253622", nombres: "Ricardo Javier", apellidos: "Torres Palacios", genero: "Masculino", edad: 39, telefono: "951753775", producto: "Sérum Vitamina C", marca: "L'Oréal (La Roche-Posay)" },
+            { dni: "46985233", nombres: "Elena Beatriz", apellidos: "Morales Delgado", genero: "Femenino", edad: 46, telefono: "987654661", producto: "Protector Anthelios", marca: "L'Oréal (La Roche-Posay)" },
+            { dni: "70258155", nombres: "Diego Armando", apellidos: "Ramírez Gutiérrez", genero: "Masculino", edad: 31, telefono: "924153332", producto: "Men Expert Hydra", marca: "L'Oréal Paris" },
+            { dni: "15487922", nombres: "Valeria Inés", apellidos: "Espinoza Bravo", genero: "Femenino", edad: 48, telefono: "993641115", producto: "Revitalift Glicólico", marca: "L'Oréal Paris" },
+            { dni: "43215644", nombres: "Alejandro José", apellidos: "Vargas Machuca", genero: "Masculino", edad: 36, telefono: "917824448", producto: "Champú Elvive Óleo", marca: "L'Oréal Paris" },
+            { dni: "75412311", nombres: "Camila Belén", apellidos: "Benítez Rojas", genero: "Femenino", edad: 22, telefono: "955412226", producto: "Infallible Matte", marca: "L'Oréal Paris" },
+            { dni: "25413633", nombres: "Manuel Antonio", apellidos: "Salazar Farfán", genero: "Masculino", edad: 50, telefono: "962358339", producto: "Loción Facial", marca: "L'Oréal (CeraVe)" },
+            { dni: "47852155", nombres: "Andrea Carolina", apellidos: "Paredes Soto", genero: "Femenino", edad: 33, telefono: "941258441", producto: "Agua Micelar 1 en 1", marca: "L'Oréal Paris" },
+            { dni: "71254977", nombres: "Christian Omar", apellidos: "Silva Dávila", genero: "Masculino", edad: 27, telefono: "989123552", producto: "Excellence Crème", marca: "L'Oréal Paris" },
+            { dni: "08965433", nombres: "Patricia Noemí", apellidos: "Cárdenas Cruz", genero: "Femenino", edad: 58, telefono: "971456663", producto: "Mineral 89 Vichy", marca: "L'Oréal (Vichy)" },
+            { dni: "44125811", nombres: "Juan Carlos", apellidos: "Medina Ortega", genero: "Masculino", edad: 38, telefono: "932581774", producto: "Effaclar Duo(+)", marca: "L'Oréal (La Roche-Posay)" },
+            { dni: "73254188", nombres: "Gabriela Alelí", apellidos: "Vega Fuentes", genero: "Femenino", edad: 26, telefono: "954789885", producto: "More Than Concealer", marca: "L'Oréal Paris" },
+            { dni: "12547844", nombres: "Roberto Carlos", apellidos: "Villanueva Ríos", genero: "Masculino", edad: 44, telefono: "911258991", producto: "Sérum Retinol", marca: "L'Oréal Paris" },
+            { dni: "49652155", nombres: "Natalia Isabel", apellidos: "Guerrero León", genero: "Femenino", edad: 30, telefono: "966321007", producto: "Elvive Glycolic", marca: "L'Oréal Paris" }
+        ];
+
+        let productos = JSON.parse(localStorage.getItem('belleza_db')) || datosBase;
+        let seguimiento = JSON.parse(localStorage.getItem('belleza_seg')) || {};
+        let scanner = null;
+
+        document.getElementById('fechaFiltro').value = new Date().toISOString().split('T')[0];
+
+        // --- CRUD LOGIC ---
+        function renderProductos() {
+            const tbody = document.getElementById('listaProductos');
+            tbody.innerHTML = productos.map((p, i) => `
+                <tr class="hover:bg-indigo-50/30 transition-colors">
+                    <td class="px-6 py-4">
+                        <div class="font-bold text-gray-800">${p.producto}</div>
+                        <div class="text-xs text-indigo-500">${p.genero} | ${p.edad} años</div>
+                    </td>
+                    <td class="px-6 py-4">
+                        <div class="text-sm font-medium">${p.nombres} ${p.apellidos}</div>
+                        <div class="text-xs text-gray-400">${p.dni}</div>
+                    </td>
+                    <td class="px-6 py-4 text-sm">${p.marca}</td>
+                    <td class="px-6 py-4 text-center">
+                        <button onclick="abrirFormulario(${i})" class="text-indigo-600 hover:text-indigo-900 mr-3 text-xs font-bold uppercase">Editar</button>
+                        <button onclick="eliminarProducto(${i})" class="text-red-400 hover:text-red-600 text-xs font-bold uppercase">Borrar</button>
+                    </td>
+                </tr>
+            `).join('');
+            guardarStorage();
+            renderSeguimiento();
+        }
+
+        async function abrirFormulario(idx = null) {
+            const p = idx !== null ? productos[idx] : { dni:'', nombres:'', apellidos:'', genero:'Femenino', edad:'', telefono:'', producto:'', marca:'' };
+            
+            const { value: formValues } = await Swal.fire({
+                title: idx !== null ? 'Actualizar Datos' : 'Nuevo Registro',
+                html: `
+                    <div class="text-left space-y-3">
+                        <input id="sw-dni" class="swal2-input !m-0 w-full" placeholder="DNI" value="${p.dni}">
+                        <div class="flex gap-2">
+                            <input id="sw-nombres" class="swal2-input !m-0 w-1/2" placeholder="Nombres" value="${p.nombres}">
+                            <input id="sw-apellidos" class="swal2-input !m-0 w-1/2" placeholder="Apellidos" value="${p.apellidos}">
+                        </div>
+                        <input id="sw-prod" class="swal2-input !m-0 w-full" placeholder="Nombre del Producto" value="${p.producto}">
+                        <input id="sw-marca" class="swal2-input !m-0 w-full" placeholder="Marca" value="${p.marca}">
+                        <div class="flex gap-2">
+                            <input id="sw-edad" type="number" class="swal2-input !m-0 w-1/2" placeholder="Edad" value="${p.edad}">
+                            <input id="sw-tel" class="swal2-input !m-0 w-1/2" placeholder="Teléfono" value="${p.telefono}">
+                        </div>
+                    </div>
+                `,
+                showCancelButton: true,
+                confirmButtonText: 'Guardar Cambios',
+                preConfirm: () => {
+                    const data = {
+                        dni: document.getElementById('sw-dni').value,
+                        nombres: document.getElementById('sw-nombres').value,
+                        apellidos: document.getElementById('sw-apellidos').value,
+                        producto: document.getElementById('sw-prod').value,
+                        marca: document.getElementById('sw-marca').value,
+                        edad: document.getElementById('sw-edad').value,
+                        telefono: document.getElementById('sw-tel').value,
+                        genero: p.genero
+                    };
+                    if (!data.dni || !data.producto) return Swal.showValidationMessage('DNI y Producto son obligatorios');
+                    return data;
+                }
+            });
+
+            if (formValues) {
+                if (idx !== null) productos[idx] = formValues;
+                else productos.push(formValues);
+                renderProductos();
+                Swal.fire('¡Listo!', 'La información ha sido guardada', 'success');
+            }
+        }
+
+        function eliminarProducto(idx) {
+            Swal.fire({
+                title: '¿Eliminar registro?',
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonColor: '#ef4444',
+                confirmButtonText: 'Sí, borrar'
+            }).then(r => { if(r.isConfirmed) { productos.splice(idx, 1); renderProductos(); } });
+        }
+
+        // --- ASISTENCIA / SEGUIMIENTO ---
+        function renderSeguimiento() {
+            const fecha = document.getElementById('fechaFiltro').value;
+            const container = document.getElementById('historialContenedor');
+            if(!seguimiento[fecha]) seguimiento[fecha] = {};
+
+            container.innerHTML = productos.map(p => {
+                const estado = seguimiento[fecha][p.dni] || 'No Registrado';
+                const color = estado === 'Verificado' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500';
+                return `
+                    <div class="flex justify-between items-center p-3 border rounded-xl">
+                        <div class="text-sm">
+                            <p class="font-bold text-gray-700">${p.producto}</p>
+                            <p class="text-xs text-gray-400">${p.nombres}</p>
+                        </div>
+                        <button onclick="toggleSeguimiento('${fecha}','${p.dni}')" class="px-3 py-1 rounded-lg text-xs font-bold uppercase transition-all ${color}">
+                            ${estado}
+                        </button>
+                    </div>
+                `;
+            }).join('');
+            guardarStorage();
+        }
+
+        function toggleSeguimiento(fecha, dni) {
+            seguimiento[fecha][dni] = seguimiento[fecha][dni] === 'Verificado' ? 'No Registrado' : 'Verificado';
+            renderSeguimiento();
+        }
+
+        // --- QR LOGIC ---
+        function iniciarEscaneo() {
+            if (scanner) { scanner.clear(); scanner = null; return; }
+
+            scanner = new Html5QrcodeScanner("reader", { fps: 10, qrbox: 250 });
+            scanner.render(onScanSuccess);
+            document.getElementById('btnQR').innerHTML = "⏹️ Detener Cámara";
+        }
+
+        function onScanSuccess(decodedText) {
+            const fecha = document.getElementById('fechaFiltro').value;
+            const prod = productos.find(p => p.dni === decodedText.trim());
+
+            if (prod) {
+                seguimiento[fecha][prod.dni] = 'Verificado';
+                Swal.fire('Escaneo Exitoso', `Producto: ${prod.producto} verificado para hoy.`, 'success');
+                scanner.clear();
+                scanner = null;
+                document.getElementById('btnQR').innerHTML = "📷 Abrir Cámara";
+                renderSeguimiento();
+            } else {
+                Swal.fire('Error', 'El código QR no corresponde a ningún responsable en el sistema.', 'error');
+            }
+        }
+
+        // --- BACKUP ---
+        function exportarBackup() {
+            const blob = new Blob([JSON.stringify({ productos, seguimiento })], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `backup_belleza_${new Date().getTime()}.json`;
+            a.click();
+        }
+
+        function importarBackup(e) {
+            const reader = new FileReader();
+            reader.onload = (event) => {
+                const data = JSON.parse(event.target.result);
+                productos = data.productos;
+                seguimiento = data.seguimiento;
+                renderProductos();
+                Swal.fire('Backup Restaurado', '', 'success');
+            };
+            reader.readAsText(e.target.files[0]);
+        }
+
+        function guardarStorage() {
+            localStorage.setItem('belleza_db', JSON.stringify(productos));
+            localStorage.setItem('belleza_seg', JSON.stringify(seguimiento));
+        }
+
+        window.onload = renderProductos;
+    </script>
+</body>
+</html>
